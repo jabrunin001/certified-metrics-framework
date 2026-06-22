@@ -1,0 +1,41 @@
+version: 2
+
+semantic_models:
+  - name: subscription_revenue
+    model: ref('fct_subscription_revenue')
+    defaults:
+      agg_time_dimension: revenue_month
+    entities:
+      - name: revenue_subscription
+        type: primary
+        expr: subscription_id
+    dimensions:
+      - name: revenue_month
+        type: time
+        expr: month_start
+        type_params: {time_granularity: month}
+    measures:
+      - name: net_revenue
+        agg: sum
+        # Governed definition = net_amount (mrr minus refunds).
+        # inject_break swaps in the buggy definition that ignores refunds.
+        expr: "{{ 'mrr_amount' if var('inject_break', false) else 'net_amount' }}"
+
+metrics:
+  - name: net_mrr
+    label: Net MRR
+    description: Net monthly recurring revenue (MRR minus refunds).
+    type: simple
+    type_params: {measure: net_revenue}
+  - name: gross_retention
+    label: Gross Retention
+    description: Net revenue this month over net revenue prior month.
+    type: derived
+    type_params:
+      expr: "current_net / prior_net"
+      metrics:
+        - name: net_mrr
+          alias: current_net
+        - name: net_mrr
+          offset_window: 1 month
+          alias: prior_net
