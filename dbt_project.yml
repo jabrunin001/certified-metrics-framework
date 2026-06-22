@@ -1,0 +1,31 @@
+name: cmf
+version: "1.0.0"
+config-version: 2
+profile: cmf
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests", "unit_tests"]
+macro-paths: ["macros"]
+
+vars:
+  inject_break: false
+  freshness_max_lag_days: 2
+  analysis_end_date: "2026-03-31"
+
+models:
+  cmf:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+    reference:
+      +materialized: table
+    certification:
+      +materialized: table
+
+seeds:
+  cmf:
+    +quote_columns: false

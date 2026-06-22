@@ -6,3 +6,5 @@ logs/
 dbt_packages/
 .pytest_cache/
 evidence/
+seeds/*.csv
+!seeds/metric_registry.csv
