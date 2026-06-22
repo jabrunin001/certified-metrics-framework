@@ -10,6 +10,8 @@ from .mf_runner import (
     semantic_metric_total, dbt_parse_with_vars,
     read_reference_totals, read_freshness, read_registry,
 )
+from .explain.heuristic import classify
+from .explain.ollama import rewrite
 
 app = typer.Typer(help="Certified Metrics Framework CLI")
 DB_PATH = "cmf.duckdb"
@@ -71,6 +73,34 @@ def pack(out: str = typer.Option("evidence", "--out")):
         lines.append(f"{digest}  {os.path.basename(p)}")
     Path(out, "MANIFEST.sha256").write_text("\n".join(lines) + "\n")
     typer.echo(f"Packed {len(files)} files into {out}/MANIFEST.sha256")
+
+
+@app.command()
+def explain(metric: str = typer.Argument(...),
+            backend: str = typer.Option("heuristic", "--backend"),
+            out: str = typer.Option("evidence", "--out")):
+    """Explain why a metric failed certification (deterministic; optional local LLM)."""
+    cert_path = Path(out, f"metric_certificate_{metric}.json")
+    if not cert_path.exists():
+        typer.echo(f"No certificate for {metric}; run certify first.", err=True)
+        raise typer.Exit(code=1)
+    cert = json.loads(cert_path.read_text())
+    refs = read_reference_totals(DB_PATH)
+    reg = {r["metric"]: r for r in read_registry(DB_PATH)}
+    refund_total = None
+    if metric == "net_mrr":
+        import duckdb
+        con = duckdb.connect(DB_PATH, read_only=True)
+        refund_total = float(con.execute(
+            "select sum(refund_amount) from fct_subscription_revenue").fetchone()[0])
+        con.close()
+    result = classify(metric, reg[metric]["kind"],
+                      cert["semantic_value"], cert["reference_value"], refund_total)
+    text = result["explanation"]
+    if backend == "ollama":
+        text = rewrite(text)
+    typer.echo(f"## {metric}: {result['cause']} ({result['confidence']} confidence)\n")
+    typer.echo(text)
 
 
 if __name__ == "__main__":
