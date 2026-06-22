@@ -1,0 +1,15 @@
+cmf:
+  target: duckdb
+  outputs:
+    duckdb:
+      type: duckdb
+      path: cmf.duckdb
+      threads: 4
+    databricks:
+      type: databricks
+      catalog: "{{ env_var('DATABRICKS_CATALOG', 'main') }}"
+      schema: "{{ env_var('DATABRICKS_SCHEMA', 'cmf') }}"
+      host: "{{ env_var('DATABRICKS_HOST', '') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH', '') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN', '') }}"
+      threads: 4
