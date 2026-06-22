@@ -34,6 +34,13 @@ net_mrr as (
     group by month_start
 ),
 
+paying_users_monthly as (
+    select 'paying_users_monthly' as metric, month_start as grain_date,
+           count(distinct user_id)::double as reference_value
+    from {{ ref('fct_subscription_revenue') }}
+    group by month_start
+),
+
 paid_conversion as (
     -- paid subscribers in month / distinct active users in month
     select 'paid_conversion' as metric, m.month_start as grain_date,
@@ -73,6 +80,7 @@ select * from dau
 union all select * from wau
 union all select * from mau
 union all select * from net_mrr
+union all select * from paying_users_monthly
 union all select * from paid_conversion
 union all select * from gross_retention
 union all select * from storage_gb_active
