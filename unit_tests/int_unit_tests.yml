@@ -1,0 +1,30 @@
+version: 2
+
+unit_tests:
+  - name: net_amount_subtracts_refund
+    model: int_subscription_months
+    given:
+      - input: ref('stg_subscriptions')
+        rows:
+          - {subscription_id: 1, user_id: 1, plan_id: pro, period_month: "2026-01-01", mrr_amount: 24.0}
+          - {subscription_id: 2, user_id: 2, plan_id: plus, period_month: "2026-01-01", mrr_amount: 12.0}
+      - input: ref('stg_refunds')
+        rows:
+          - {refund_id: 1, subscription_id: 1, period_month: "2026-01-01", refund_amount: 10.0}
+    expect:
+      rows:
+        - {subscription_id: 1, period_month: "2026-01-01", mrr_amount: 24.0, refund_amount: 10.0, net_amount: 14.0}
+        - {subscription_id: 2, period_month: "2026-01-01", mrr_amount: 12.0, refund_amount: 0.0, net_amount: 12.0}
+
+  - name: daily_activity_collapses_to_one_row_per_user_day
+    model: int_user_daily_activity
+    given:
+      - input: ref('stg_usage_events')
+        rows:
+          - {user_id: 1, event_date: "2026-01-05", storage_bytes: 100}
+          - {user_id: 1, event_date: "2026-01-05", storage_bytes: 300}
+          - {user_id: 1, event_date: "2026-01-06", storage_bytes: 50}
+    expect:
+      rows:
+        - {user_id: 1, event_date: "2026-01-05", is_active: 1, storage_bytes_day: 300}
+        - {user_id: 1, event_date: "2026-01-06", is_active: 1, storage_bytes_day: 50}

@@ -1,0 +1,10 @@
+version: 2
+models:
+  - name: int_user_daily_activity
+    columns:
+      - name: user_id
+        data_tests: [not_null]
+  - name: int_subscription_months
+    columns:
+      - name: net_amount
+        data_tests: [not_null]
