@@ -6,6 +6,10 @@ A metric is **certified** only when it is *governed* (one MetricFlow definition)
 point: **a query that returns a number is not a correct metric**. A definition
 bug passes every schema test and is caught only by reconciliation.
 
+**Live demo:** https://jabrunin001.github.io/certified-metrics-framework/ — flip
+the *inject definition bug* toggle and watch only the reconciliation gate go red
+while every schema and freshness test stays green.
+
 ## 60-second quickstart
 
 Needs Python 3.11+ (see `.python-version`).
