@@ -1,9 +1,18 @@
 from __future__ import annotations
 import json
 import subprocess
+import sys
+from pathlib import Path
 import duckdb
 
 MF_GRAIN = {"dau": "day", "wau": "week"}  # everything else is monthly
+
+# Resolve dbt/mf to the same venv that hosts this package so subprocess
+# calls don't accidentally use the system-installed dbt (which may lack
+# the duckdb adapter).
+_VENV_BIN = Path(sys.executable).parent
+_DBT = str(_VENV_BIN / "dbt")
+_MF = str(_VENV_BIN / "mf")
 
 
 def parse_mf_table(text: str) -> float | None:
@@ -33,7 +42,7 @@ def dbt_parse_with_vars(inject_break: bool, runner=subprocess.run) -> bool:
     metricflow 0.206.0 has no --dbt-vars on `mf query`; the var must be set
     at parse time so the compiled measure expr in target/ reflects it.
     """
-    cmd = ["dbt", "parse", "--profiles-dir", ".",
+    cmd = [_DBT, "parse", "--profiles-dir", ".",
            "--vars", json.dumps({"inject_break": bool(inject_break)})]
     result = runner(cmd, capture_output=True, text=True)
     return getattr(result, "returncode", 1) == 0
@@ -47,8 +56,9 @@ def semantic_metric_total(metric: str, runner=subprocess.run) -> float | None:
     """
     grain = MF_GRAIN.get(metric, "month")
     group_by = f"metric_time__{grain}"
-    cmd = ["mf", "query", "--metrics", metric,
-           "--group-by", group_by, "--order", group_by]
+    cmd = [_MF, "query", "--metrics", metric,
+           "--group-by", group_by, "--order", group_by,
+           "--decimals", "10"]
     result = runner(cmd, capture_output=True, text=True)
     if getattr(result, "returncode", 1) != 0:
         return None
