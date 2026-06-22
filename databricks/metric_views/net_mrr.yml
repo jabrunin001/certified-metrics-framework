@@ -1,0 +1,9 @@
+version: 0.1
+source: cmf.analytics.fct_subscription_revenue
+dimensions:
+  - name: revenue_month
+    expr: month_start
+measures:
+  - name: net_mrr
+    # Same governed definition as MetricFlow's net_revenue measure: net of refunds.
+    expr: SUM(net_amount)
