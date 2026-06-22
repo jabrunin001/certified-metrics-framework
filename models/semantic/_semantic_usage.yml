@@ -1,0 +1,81 @@
+version: 2
+
+semantic_models:
+  - name: usage_daily
+    model: ref('fct_usage_daily')
+    defaults:
+      agg_time_dimension: activity_day
+    entities:
+      - name: user
+        type: foreign
+        expr: user_id
+      - name: usage_row
+        type: primary
+        expr: "cast(user_id as varchar) || '-' || cast(date_day as varchar)"
+    dimensions:
+      - name: activity_day
+        type: time
+        expr: date_day
+        type_params: {time_granularity: day}
+    measures:
+      - name: active_users
+        agg: count_distinct
+        expr: user_id
+      - name: storage_gb_sum
+        agg: sum
+        expr: "storage_bytes_day / 1e9"
+
+  - name: subscription_revenue_users
+    model: ref('fct_subscription_revenue')
+    defaults:
+      agg_time_dimension: revenue_month
+    entities:
+      - name: user
+        type: foreign
+        expr: user_id
+      - name: subscription
+        type: primary
+        expr: subscription_id
+    dimensions:
+      - name: revenue_month
+        type: time
+        expr: month_start
+        type_params: {time_granularity: month}
+    measures:
+      - name: paying_users
+        agg: count_distinct
+        expr: user_id
+
+metrics:
+  - name: dau
+    label: Daily Active Users
+    description: Distinct active users per day.
+    type: simple
+    type_params: {measure: active_users}
+  - name: wau
+    label: Weekly Active Users
+    description: Distinct active users per week.
+    type: simple
+    type_params: {measure: active_users}
+  - name: mau
+    label: Monthly Active Users
+    description: Distinct active users per month.
+    type: simple
+    type_params: {measure: active_users}
+  - name: storage_gb_active
+    label: Active Storage (GB)
+    description: Active storage in GB per day.
+    type: simple
+    type_params: {measure: storage_gb_sum}
+  - name: paying_users_monthly
+    label: Paying Users Monthly
+    description: Distinct paying users per month.
+    type: simple
+    type_params: {measure: paying_users}
+  - name: paid_conversion
+    label: Paid Conversion Rate
+    description: Paying users divided by active users in the month.
+    type: ratio
+    type_params:
+      numerator: paying_users_monthly
+      denominator: mau
