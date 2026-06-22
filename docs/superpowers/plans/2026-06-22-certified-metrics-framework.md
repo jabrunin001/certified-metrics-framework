@@ -18,7 +18,7 @@
 - No cloud LLM, no API keys, no network calls in any default code path. The optional `--backend ollama` path is the only LLM call and is local-only.
 - Bug injection is controlled solely by dbt var `inject_break` (default `false`); no other code path changes metric values.
 - Reconciliation tolerance: exact equality for integer count metrics; relative tolerance `1e-4` (0.01%) for revenue/ratio metrics.
-- Metric set (canonical, used everywhere): `dau`, `wau`, `mau`, `paid_conversion`, `net_mrr`, `gross_retention`, `storage_gb_active`.
+- Metric set (canonical, used everywhere) — **8 metrics**: `dau`, `wau`, `mau`, `paid_conversion`, `net_mrr`, `gross_retention`, `storage_gb_active`, `paying_users_monthly`. (`paying_users_monthly` is both a certified metric in its own right and the numerator of the `paid_conversion` ratio; metricflow 0.206.0 requires ratio numerators/denominators to be metric references, not raw measures.) A clean certify reports **8/8 metrics certified**.
 - **Pydantic is v1 (1.10.x), not v2** — MetricFlow 0.206.0 (pulled by `dbt-metricflow[duckdb]==0.7.1`) hard-pins `pydantic<1.11`, and the whole project shares one venv. Use pydantic v1 APIs everywhere: `model.dict()` (not `model_dump()`), `model.json(indent=2)` (not `model_dump_json(...)`). `BaseModel`, `Literal` fields, `X | None` annotations, defaults, and `@property` all work unchanged under v1 on Python 3.11.
 
 ---
@@ -789,7 +789,7 @@ Run:
 ```bash
 duckdb cmf.duckdb "select metric, count(*) n, round(min(reference_value),2) lo, round(max(reference_value),2) hi from ref_metric_values group by metric order by metric"
 ```
-Expected: 7 metrics, all with non-null ranges (e.g. `net_mrr` three rows, one per month).
+Expected: the 7 base metrics, all with non-null ranges (e.g. `net_mrr` three rows, one per month). An 8th metric, `paying_users_monthly` (distinct paying users per month), is added to this model and to `seeds/metric_registry.csv` once the semantic layer is built in Task 7 — it is the registered counterpart of the ratio numerator, bringing the certified total to 8.
 
 - [ ] **Step 5: Commit**
 
@@ -1219,38 +1219,61 @@ git commit -m "feat: pure gate logic + Pydantic certificate models"
 **Interfaces:**
 - Consumes: `gates`/`models` not required here.
 - Produces (in `metrics_cli/mf_runner.py`):
-  - `parse_mf_csv(text: str) -> float | None` — pure parser that sums the metric column of a MetricFlow CSV result (last column), returns None if empty.
-  - `semantic_metric_total(metric: str, *, inject_break: bool, runner=subprocess.run) -> float | None` — runs `mf query` for the metric and returns the summed value. `runner` is injectable for testing.
+  - `parse_mf_table(text: str) -> float | None` — pure parser that sums the value column of MetricFlow's whitespace-aligned table output. Strategy: for each line, split on whitespace and try `float(last token)`; sum the ones that parse. This naturally skips the header row (last token is the metric name), `None` rows (gross_retention's first month), and any mf log lines. Returns None if no numeric rows.
+  - `dbt_parse_with_vars(inject_break: bool, runner=subprocess.run) -> bool` — runs `dbt parse --profiles-dir . --vars '{"inject_break": <bool>}'` to compile the manifest MetricFlow reads from `target/`. Returns True on success. **This is how the break is injected** — metricflow 0.206.0 has no `--dbt-vars` flag on `mf query`, so the var must be baked into the compiled manifest first.
+  - `semantic_metric_total(metric: str, runner=subprocess.run) -> float | None` — runs `mf query --metrics <m> --group-by metric_time__<grain> --order metric_time__<grain>` against the currently-compiled manifest and returns the summed value. Grain per `MF_GRAIN = {"dau": "day", "wau": "week"}` (default `"month"`). Does NOT parse vars itself — the caller calls `dbt_parse_with_vars` once first.
   - `read_reference_totals(db_path: str) -> dict[str, float]` — sums `ref_metric_values.reference_value` per metric from DuckDB.
   - `read_freshness(db_path: str) -> list[dict]` — reads `cert_freshness`.
   - `read_registry(db_path: str) -> list[dict]` — reads the `metric_registry` seed table.
+
+Note on grain and reconciliation: distinct-count metrics (dau day, wau week, mau/paying_users_monthly month) MUST be queried at the same grain their reference uses, so the summed totals match. Additive metrics (net_mrr, storage_gb_active) reconcile at any grain because the total is grain-independent; we query them at month. Ratio/derived (paid_conversion, gross_retention) are summed across the same monthly rows on both sides.
 
 - [ ] **Step 1: Write the failing test (pure parser + injected runner)**
 
 ```python
 # tests_py/test_mf_runner.py
-from metrics_cli.mf_runner import parse_mf_csv, semantic_metric_total
+from metrics_cli.mf_runner import (
+    parse_mf_table, semantic_metric_total, dbt_parse_with_vars,
+)
 
-def test_parse_mf_csv_sums_last_column():
-    csv_text = "metric_time__month,net_mrr\n2026-01-01,100.5\n2026-02-01,200.0\n"
-    assert parse_mf_csv(csv_text) == 300.5
+def test_parse_mf_table_sums_value_column():
+    text = ("metric_time__month  net_mrr\n"
+            "2026-01-01T00:00:00  100.5\n"
+            "2026-02-01T00:00:00  200.0\n")
+    assert parse_mf_table(text) == 300.5
 
-def test_parse_mf_csv_empty_returns_none():
-    assert parse_mf_csv("metric_time__month,net_mrr\n") is None
+def test_parse_mf_table_skips_none_and_header():
+    text = ("metric_time__month  gross_retention\n"
+            "2026-01-01T00:00:00  None\n"
+            "2026-02-01T00:00:00  1.98\n")
+    assert parse_mf_table(text) == 1.98
 
-def test_semantic_metric_total_uses_runner_and_passes_inject_break():
+def test_parse_mf_table_empty_returns_none():
+    assert parse_mf_table("metric_time__month  net_mrr\n") is None
+
+def test_semantic_metric_total_uses_correct_grain_and_parses():
     captured = {}
     class FakeCompleted:
         returncode = 0
-        stdout = "metric_time__month,net_mrr\n2026-01-01,42.0\n"
+        stdout = "metric_time__week  wau\n2026-01-05T00:00:00  42.0\n"
         stderr = ""
     def fake_runner(cmd, **kwargs):
         captured["cmd"] = cmd
         return FakeCompleted()
-    total = semantic_metric_total("net_mrr", inject_break=True, runner=fake_runner)
+    total = semantic_metric_total("wau", runner=fake_runner)
     assert total == 42.0
-    assert "net_mrr" in captured["cmd"]
-    assert any("inject_break: true" in str(c) for c in captured["cmd"])
+    assert "metric_time__week" in captured["cmd"]
+    assert "wau" in captured["cmd"]
+
+def test_dbt_parse_with_vars_passes_inject_break_true():
+    captured = {}
+    class FakeCompleted:
+        returncode = 0
+    def fake_runner(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeCompleted()
+    assert dbt_parse_with_vars(True, runner=fake_runner) is True
+    assert any('"inject_break": true' in str(c) for c in captured["cmd"])
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1262,44 +1285,60 @@ Expected: FAIL — module not found.
 
 ```python
 from __future__ import annotations
-import csv
-import io
+import json
 import subprocess
 import duckdb
 
+MF_GRAIN = {"dau": "day", "wau": "week"}  # everything else is monthly
 
-def parse_mf_csv(text: str) -> float | None:
-    reader = csv.reader(io.StringIO(text))
-    rows = [r for r in reader if r and any(c.strip() for c in r)]
-    if len(rows) <= 1:
-        return None
+
+def parse_mf_table(text: str) -> float | None:
+    """Sum the value column of MetricFlow's whitespace table output.
+
+    For each line, the metric value is the last whitespace-delimited token.
+    Lines whose last token is not a float (header row, 'None' rows, mf log
+    lines) are skipped. Returns None when no numeric row is found.
+    """
     total = 0.0
     seen = False
-    for row in rows[1:]:
+    for line in text.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
         try:
-            total += float(row[-1])
+            total += float(parts[-1])
             seen = True
         except ValueError:
             continue
     return total if seen else None
 
 
-def semantic_metric_total(metric: str, *, inject_break: bool, runner=subprocess.run) -> float | None:
-    group_by = "metric_time__month" if metric in {"net_mrr", "gross_retention", "mau",
-                                                   "paid_conversion"} else "metric_time__day"
-    cmd = [
-        "mf", "query",
-        "--metrics", metric,
-        "--group-by", group_by,
-        "--csv", "/dev/stdout",
-        "--dbt-profiles-dir", ".",
-    ]
-    if inject_break:
-        cmd += ["--dbt-vars", "inject_break: true"]
+def dbt_parse_with_vars(inject_break: bool, runner=subprocess.run) -> bool:
+    """Compile the manifest MetricFlow reads, baking in inject_break.
+
+    metricflow 0.206.0 has no --dbt-vars on `mf query`; the var must be set
+    at parse time so the compiled measure expr in target/ reflects it.
+    """
+    cmd = ["dbt", "parse", "--profiles-dir", ".",
+           "--vars", json.dumps({"inject_break": bool(inject_break)})]
+    result = runner(cmd, capture_output=True, text=True)
+    return getattr(result, "returncode", 1) == 0
+
+
+def semantic_metric_total(metric: str, runner=subprocess.run) -> float | None:
+    """Query one metric via MetricFlow at its reconciliation grain and sum it.
+
+    Caller must have run dbt_parse_with_vars(...) first to set the manifest
+    state (clean or broken).
+    """
+    grain = MF_GRAIN.get(metric, "month")
+    group_by = f"metric_time__{grain}"
+    cmd = ["mf", "query", "--metrics", metric,
+           "--group-by", group_by, "--order", group_by]
     result = runner(cmd, capture_output=True, text=True)
     if getattr(result, "returncode", 1) != 0:
         return None
-    return parse_mf_csv(result.stdout)
+    return parse_mf_table(result.stdout)
 
 
 def read_reference_totals(db_path: str) -> dict[str, float]:
@@ -1337,12 +1376,20 @@ def read_registry(db_path: str) -> list[dict]:
         con.close()
 ```
 
-Note: the `--csv /dev/stdout` form keeps the parser test-driven and avoids temp files on macOS/Linux CI. If a `mf` version rejects `/dev/stdout`, the runner can be pointed at a temp path; the parser is unchanged.
+Note: `parse_mf_table` is intentionally forgiving — it sums any line ending in a float. This survives mf printing log/banner lines to stdout and is far more robust than column-position parsing. The mechanism (parse-then-query) was verified end-to-end in Task 7: clean net_mrr total 23393.19, broken 24672.00.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests_py/test_mf_runner.py -v`
-Expected: PASS (3 passed)
+Expected: PASS (5 passed)
+
+- [ ] **Step 4b: Smoke-test against the real manifest**
+
+Run:
+```bash
+python -c "from metrics_cli.mf_runner import dbt_parse_with_vars, semantic_metric_total; dbt_parse_with_vars(False); print('net_mrr', semantic_metric_total('net_mrr')); print('dau', semantic_metric_total('dau'))"
+```
+Expected: `net_mrr` ≈ 23393.19 and `dau` a positive number (sum of daily distinct actives). Confirms the runner drives the real `mf` CLI, not just the fakes.
 
 - [ ] **Step 5: Commit**
 
@@ -1471,12 +1518,13 @@ import glob
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
+import yaml
 import typer
 from .certificate import build_certificate, render_registry_md
 from .mf_runner import (
-    semantic_metric_total, read_reference_totals, read_freshness, read_registry,
+    semantic_metric_total, dbt_parse_with_vars,
+    read_reference_totals, read_freshness, read_registry,
 )
 
 app = typer.Typer(help="Certified Metrics Framework CLI")
@@ -1485,12 +1533,13 @@ AS_OF = "2026-03-31"
 
 
 def _semantic_metric_names() -> set[str]:
+    """Top-level metric names defined in the MetricFlow YAML (the governed set)."""
     names: set[str] = set()
     for path in glob.glob("models/semantic/*.yml"):
-        text = Path(path).read_text()
-        block = text.split("metrics:", 1)
-        if len(block) == 2:
-            names.update(re.findall(r"-\s*name:\s*([A-Za-z0-9_]+)", block[1]))
+        doc = yaml.safe_load(Path(path).read_text()) or {}
+        for m in (doc.get("metrics") or []):
+            if isinstance(m, dict) and "name" in m:
+                names.add(m["name"])
     return names
 
 
@@ -1504,10 +1553,15 @@ def certify(inject_break: bool = typer.Option(False, "--inject-break"),
     semantic_names = _semantic_metric_names()
     os.makedirs(out, exist_ok=True)
 
+    # Compile the manifest once in the requested state; mf reads it from target/.
+    if not dbt_parse_with_vars(inject_break):
+        typer.echo("dbt parse failed; cannot compute semantic values", err=True)
+        raise typer.Exit(code=2)
+
     certs = []
     for row in registry:
         metric = row["metric"]
-        sem = semantic_metric_total(metric, inject_break=inject_break)
+        sem = semantic_metric_total(metric)
         cert = build_certificate(row, sem, references.get(metric), freshness,
                                  semantic_names, registry, AS_OF)
         certs.append(cert)
@@ -1552,7 +1606,7 @@ dbt build --profiles-dir .
 python -m metrics_cli.cli certify
 cat evidence/certification_registry.md
 ```
-Expected: every metric prints `PASS`; registry shows `7/7 metrics certified`; exit code 0.
+Expected: every metric prints `PASS`; registry shows `8/8 metrics certified`; exit code 0.
 
 - [ ] **Step 7: Commit**
 
@@ -1754,7 +1808,7 @@ dbt build --profiles-dir .
 python -m metrics_cli.cli certify
 echo "exit: $?"
 ```
-Expected: `7/7 metrics certified`, `exit: 0`.
+Expected: `8/8 metrics certified`, `exit: 0`.
 
 - [ ] **Step 2: Inject the bug and confirm dbt schema tests stay green**
 
@@ -1790,7 +1844,7 @@ Run:
 dbt build --profiles-dir .
 python -m metrics_cli.cli certify && echo "restored: certified"
 ```
-Expected: `7/7 metrics certified`, prints `restored: certified`.
+Expected: `8/8 metrics certified`, prints `restored: certified`.
 
 - [ ] **Step 6: Commit (records nothing new but marks the milestone)**
 
@@ -2161,7 +2215,7 @@ python -m metrics_cli.cli certify
 cat evidence/certification_registry.md
 ```
 
-No warehouse, no credentials, no network. A clean run reports `7/7 metrics certified`.
+No warehouse, no credentials, no network. A clean run reports `8/8 metrics certified`.
 
 ## The control in action
 
@@ -2225,7 +2279,7 @@ rm -f cmf.duckdb && rm -rf evidence
 dbt deps --profiles-dir . && python scripts/seed_events.py && dbt build --profiles-dir .
 python -m metrics_cli.cli certify && python -m metrics_cli.cli pack
 ```
-Expected: `7/7 metrics certified`; `pack` writes `evidence/MANIFEST.sha256`.
+Expected: `8/8 metrics certified`; `pack` writes `evidence/MANIFEST.sha256`.
 
 - [ ] **Step 3: Commit**
 
@@ -2255,4 +2309,4 @@ git commit -m "docs: README with quickstart, control-in-action, and capability m
 
 **Placeholder scan:** No TBD/TODO; every code step shows complete code; every run step shows the command and expected output. ✓
 
-**Type consistency:** `GateResult`/`MetricCertificate` fields used identically across Tasks 9, 11, 12. `build_certificate` signature in Task 11 matches its test and CLI caller. `semantic_metric_total(metric, *, inject_break, runner)` consistent across Tasks 10–11. CLI prints `FAIL  net_mrr` (two spaces) — matched by the CI grep in Task 16 and the proof in Task 13. Registry CSV columns (`metric,owner,grain,kind,definition_file`) consistent across Tasks 2, 10, 11. ✓
+**Type consistency:** `GateResult`/`MetricCertificate` fields used identically across Tasks 9, 11, 12. `build_certificate` signature in Task 11 matches its test and CLI caller. `semantic_metric_total(metric, runner)` + `dbt_parse_with_vars(inject_break, runner)` consistent across Tasks 10–11 (injection via dbt parse, not an mf flag). CLI prints `FAIL  net_mrr` (two spaces) — matched by the CI grep in Task 16 and the proof in Task 13. Registry CSV columns (`metric,owner,grain,kind,definition_file`) consistent across Tasks 2, 10, 11. ✓
