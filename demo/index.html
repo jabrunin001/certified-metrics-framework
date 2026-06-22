@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Certified Metrics — trust layer for analytics</title>
+<meta name="description" content="A metric is certified only when governed, fresh, and reconciled. Live demo of catching a definition bug that every schema test misses." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    /* color tokens */
+    --brand:#0061ff;          /* Dropbox-blue brand / CTA */
+    --brand-700:#0047c4;
+    --brand-050:#eef4ff;
+    --ink:#0b1626;            /* primary text */
+    --ink-2:#41506a;          /* secondary text */
+    --ink-3:#697892;          /* tertiary / labels */
+    --bg:#f5f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfcfe;
+    --border:#e3e8f1;
+    --border-2:#d4dbe8;
+    --ok:#0a8f5b;     --ok-bg:#e7f7ef;  --ok-bd:#bce8d3;
+    --bad:#d11f3a;    --bad-bg:#fdebee; --bad-bd:#f6c9d1;
+    --warn:#9a5b00;   --warn-bg:#fff4e2; --warn-bd:#f4dcab;
+    --amber:#b25e00;
+    --ring:rgba(0,97,255,.45);
+    --shadow-sm:0 1px 2px rgba(13,30,60,.06), 0 1px 3px rgba(13,30,60,.05);
+    --shadow-md:0 6px 16px rgba(13,30,60,.08), 0 2px 6px rgba(13,30,60,.05);
+    --shadow-lg:0 24px 60px rgba(13,30,60,.14);
+    --r-sm:8px; --r-md:12px; --r-lg:18px; --r-xl:26px;
+    --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:"Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; font-family:var(--sans); color:var(--ink);
+    background:var(--bg); line-height:1.5;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  h1,h2,h3{line-height:1.12; letter-spacing:-.02em; margin:0}
+  p{margin:0}
+  a{color:inherit; text-decoration:none}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+  .num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+  :focus-visible{outline:3px solid var(--ring); outline-offset:2px; border-radius:6px}
+  .wrap{max-width:1160px; margin:0 auto; padding:0 24px}
+
+  /* ---------- top nav ---------- */
+  header.nav{
+    position:sticky; top:0; z-index:100;
+    background:rgba(255,255,255,.82); backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-inner{display:flex; align-items:center; gap:28px; height:64px}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.03em; font-size:16px}
+  .brand .glyph{width:30px; height:30px; flex:0 0 auto}
+  .nav-links{display:flex; gap:26px; margin-left:8px}
+  .nav-links a{color:var(--ink-2); font-weight:500; font-size:14.5px; transition:color .15s ease}
+  .nav-links a:hover{color:var(--ink)}
+  .nav-cta{margin-left:auto; display:flex; align-items:center; gap:14px}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+    font-family:var(--sans); font-weight:600; font-size:14.5px;
+    border-radius:10px; border:1px solid transparent; padding:10px 16px;
+    transition:transform .12s ease, background .15s ease, box-shadow .15s ease, border-color .15s ease;
+    min-height:42px;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--brand); color:#fff; box-shadow:var(--shadow-sm)}
+  .btn-primary:hover{background:var(--brand-700); box-shadow:var(--shadow-md)}
+  .btn-ghost{background:transparent; color:var(--ink); border-color:var(--border-2)}
+  .btn-ghost:hover{background:#fff; border-color:var(--ink-3)}
+  .btn-link{color:var(--ink-2); font-weight:600; font-size:14.5px}
+  .btn-link:hover{color:var(--brand)}
+  @media (max-width:880px){ .nav-links{display:none} }
+
+  /* ---------- hero ---------- */
+  .hero{position:relative; overflow:hidden; padding:74px 0 56px}
+  .hero::before{
+    content:""; position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(900px 420px at 12% -10%, #e7f0ff 0%, rgba(231,240,255,0) 60%),
+      radial-gradient(700px 380px at 96% 8%, #fff1dd 0%, rgba(255,241,221,0) 55%);
+    pointer-events:none;
+  }
+  .hero .wrap{position:relative; z-index:1; display:grid; grid-template-columns:1.04fr .96fr; gap:54px; align-items:center}
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:13px;
+    color:var(--brand-700); background:var(--brand-050); border:1px solid #d6e4ff;
+    padding:6px 12px; border-radius:999px; letter-spacing:.01em;
+  }
+  .hero h1{font-size:clamp(34px,4.4vw,52px); font-weight:800; margin:20px 0 0}
+  .hero h1 .accent{color:var(--brand)}
+  .hero .lede{margin-top:18px; font-size:18px; color:var(--ink-2); max-width:34ch}
+  .hero .lede b{color:var(--ink); font-weight:600}
+  .hero-actions{display:flex; gap:14px; margin-top:30px; flex-wrap:wrap}
+  .trust-row{display:flex; gap:22px; margin-top:30px; flex-wrap:wrap}
+  .trust-row .tr{display:flex; align-items:center; gap:9px; color:var(--ink-2); font-size:14px; font-weight:500}
+  .trust-row .tr svg{color:var(--ok)}
+
+  /* live preview card in hero */
+  .preview{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-lg); overflow:hidden;
+  }
+  .preview-top{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--border); background:var(--surface-2)}
+  .dot{width:11px; height:11px; border-radius:50%}
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .preview-top .file{margin-left:8px; font-family:var(--mono); font-size:12.5px; color:var(--ink-3)}
+  .preview-body{padding:16px}
+  .pv-row{display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border-radius:8px}
+  .pv-row + .pv-row{margin-top:2px}
+  .pv-row:nth-child(odd){background:var(--surface-2)}
+  .pv-k{display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:13px; color:var(--ink)}
+  .pv-v{font-family:var(--mono); font-size:12.5px; color:var(--ink-3)}
+  .tick{width:18px; height:18px; flex:0 0 auto}
+  .pv-foot{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 16px; border-top:1px solid var(--border); background:var(--surface-2);
+    font-size:13px; color:var(--ink-2);
+  }
+  @media (max-width:920px){
+    .hero .wrap{grid-template-columns:1fr; gap:38px}
+    .hero{padding:48px 0 40px}
+  }
+
+  /* ---------- generic section ---------- */
+  section.band{padding:62px 0}
+  .sec-head{max-width:640px; margin-bottom:30px}
+  .sec-head .kicker{font-weight:700; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--brand)}
+  .sec-head h2{font-size:clamp(26px,3vw,34px); font-weight:800; margin-top:12px}
+  .sec-head p{margin-top:12px; font-size:16.5px; color:var(--ink-2)}
+
+  /* ---------- KPI cards ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:16px}
+  .kpi{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:18px 18px 16px; box-shadow:var(--shadow-sm);
+  }
+  .kpi .lbl{font-size:12.5px; color:var(--ink-3); font-weight:600; letter-spacing:.02em; display:flex; align-items:center; gap:7px}
+  .kpi .val{font-size:30px; font-weight:800; letter-spacing:-.03em; margin-top:8px; color:var(--ink)}
+  .kpi .val small{font-size:15px; font-weight:600; color:var(--ink-3)}
+  .kpi .sub{font-size:12.5px; color:var(--ink-2); margin-top:6px}
+  .kpi.alert{border-color:var(--bad-bd); background:linear-gradient(0deg,#fff,var(--bad-bg))}
+  .kpi.alert .val{color:var(--bad)}
+  @media (max-width:880px){ .kpis{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:480px){ .kpis{grid-template-columns:1fr} }
+
+  /* ---------- dashboard panel ---------- */
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-md); overflow:hidden; margin-top:22px;
+  }
+  .panel-head{display:flex; align-items:center; gap:14px; padding:18px 22px; border-bottom:1px solid var(--border); flex-wrap:wrap}
+  .panel-head h3{font-size:17px; font-weight:700}
+  .panel-head .desc{font-size:13.5px; color:var(--ink-3)}
+  .status-pill{
+    display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:13px;
+    padding:6px 12px; border-radius:999px; border:1px solid var(--ok-bd); background:var(--ok-bg); color:var(--ok);
+  }
+  .status-pill.bad{border-color:var(--bad-bd); background:var(--bad-bg); color:var(--bad)}
+  .status-pill .pulse{width:8px; height:8px; border-radius:50%; background:currentColor; box-shadow:0 0 0 0 currentColor; animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(10,143,91,.5)}70%{box-shadow:0 0 0 7px rgba(10,143,91,0)}100%{box-shadow:0 0 0 0 rgba(10,143,91,0)}}
+  .status-pill.bad .pulse{animation:pulseBad 2s infinite}
+  @keyframes pulseBad{0%{box-shadow:0 0 0 0 rgba(209,31,58,.5)}70%{box-shadow:0 0 0 7px rgba(209,31,58,0)}100%{box-shadow:0 0 0 0 rgba(209,31,58,0)}}
+  .ml-auto{margin-left:auto}
+
+  /* control toggle */
+  .control-bar{
+    display:flex; align-items:center; gap:14px; padding:14px 22px; background:var(--surface-2);
+    border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  .control-bar .ctl-txt{font-size:13.5px; color:var(--ink-2)}
+  .control-bar .ctl-txt b{color:var(--ink)}
+  .switch{position:relative; display:inline-flex; align-items:center; gap:11px; cursor:pointer; user-select:none}
+  .switch input{position:absolute; opacity:0; width:0; height:0}
+  .track{width:46px; height:26px; border-radius:999px; background:var(--border-2); transition:background .2s ease; flex:0 0 auto}
+  .knob{position:absolute; left:3px; top:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:var(--shadow-sm); transition:transform .2s ease}
+  .switch input:checked + .track{background:var(--bad)}
+  .switch input:checked + .track + .knob{transform:translateX(20px)}
+  .switch:focus-within .track{box-shadow:0 0 0 3px var(--ring)}
+  .switch .lab{font-weight:600; font-size:14px}
+
+  /* table */
+  .tbl-scroll{overflow-x:auto}
+  table{width:100%; border-collapse:collapse; min-width:760px}
+  thead th{
+    text-align:left; font-size:11.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-3); font-weight:700; padding:13px 16px; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  thead th.r, tbody td.r{text-align:right}
+  tbody td{padding:14px 16px; border-bottom:1px solid #eef1f7; font-size:14px; vertical-align:middle}
+  tbody tr{transition:background .12s ease}
+  tbody tr:hover{background:var(--surface-2)}
+  tbody tr:last-child td{border-bottom:none}
+  .metric-name{font-family:var(--mono); font-weight:600; font-size:13.5px; color:var(--ink)}
+  .owner{font-size:13px; color:var(--ink-2)}
+  .badge{display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:12px; padding:4px 10px; border-radius:999px}
+  .badge.ok{background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok-bd)}
+  .badge.bad{background:var(--bad-bg); color:var(--bad); border:1px solid var(--bad-bd)}
+  .badge svg{width:13px; height:13px}
+  .variance{font-family:var(--mono); font-size:13px; color:var(--ink-2)}
+  .variance.fail{color:var(--bad); font-weight:600}
+  .checksum{font-family:var(--mono); font-size:12px; color:var(--ink-3)}
+  .val-cell{font-family:var(--mono); font-weight:600; font-size:13.5px}
+  .val-cell.shift{color:var(--bad)}
+  tr.row-fail{background:var(--bad-bg) !important}
+  tr.row-fail:hover{background:#fbe1e6 !important}
+  .fresh{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-2)}
+  .fresh .d{width:7px; height:7px; border-radius:50%; background:var(--ok)}
+
+  /* gate strip + explainer (reconciliation proof) */
+  .proof{display:grid; grid-template-columns:1.25fr .9fr; gap:22px; margin-top:22px}
+  @media (max-width:860px){ .proof{grid-template-columns:1fr} }
+  .gates{display:flex; flex-direction:column; gap:12px}
+  .gate{
+    display:flex; align-items:center; gap:14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--r-md); padding:15px 16px; box-shadow:var(--shadow-sm);
+  }
+  .gate .ic{width:38px; height:38px; border-radius:10px; display:grid; place-items:center; flex:0 0 auto; background:var(--ok-bg); color:var(--ok)}
+  .gate.fail .ic{background:var(--bad-bg); color:var(--bad)}
+  .gate .g-t{font-weight:700; font-size:14.5px}
+  .gate .g-d{font-size:12.5px; color:var(--ink-3); margin-top:2px}
+  .gate .res{margin-left:auto; font-weight:700; font-size:12.5px; color:var(--ok)}
+  .gate.fail .res{color:var(--bad)}
+
+  .explain{
+    background:#0b1626; color:#e8edf6; border-radius:var(--r-md); padding:18px; box-shadow:var(--shadow-md);
+    font-family:var(--mono); font-size:13px; align-self:start;
+  }
+  .explain .e-head{display:flex; align-items:center; gap:9px; color:#9fb4d8; font-size:12px; letter-spacing:.04em; margin-bottom:12px}
+  .explain pre{margin:0; white-space:pre-wrap; line-height:1.65}
+  .explain .ok-line{color:#5fd3a0}
+  .explain .bad-line{color:#ff8a9b}
+  .explain .dim{color:#7c8aa6}
+  .explain .key{color:#ffce7a}
+
+  /* tolerance band viz */
+  .band-viz{margin-top:18px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:20px 22px; box-shadow:var(--shadow-sm)}
+  .band-viz h4{font-size:14px; font-weight:700; margin:0 0 4px}
+  .band-viz .bv-sub{font-size:12.5px; color:var(--ink-3); margin-bottom:18px}
+  .track-wrap{position:relative; height:64px}
+  .axis{position:absolute; left:0; right:0; top:32px; height:2px; background:var(--border-2)}
+  .tol{position:absolute; top:18px; height:30px; background:rgba(10,143,91,.10); border-left:1px dashed var(--ok); border-right:1px dashed var(--ok); border-radius:4px}
+  .zero{position:absolute; top:10px; bottom:10px; width:2px; background:var(--ink-3); left:50%}
+  .zlabel{position:absolute; top:46px; transform:translateX(-50%); font-size:11px; color:var(--ink-3); font-family:var(--mono)}
+  .marker{position:absolute; top:25px; width:16px; height:16px; border-radius:50%; background:var(--brand); border:2px solid #fff; box-shadow:var(--shadow-sm); transform:translateX(-50%); transition:left .5s cubic-bezier(.4,0,.2,1), background .3s ease; cursor:help}
+  .marker.fail{background:var(--bad); z-index:3; width:18px; height:18px; top:24px}
+  .marker .mtip{
+    position:absolute; bottom:140%; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; font-family:var(--mono); font-size:11px; padding:5px 8px; border-radius:6px;
+    white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s ease;
+  }
+  .marker:hover .mtip, .marker:focus .mtip{opacity:1}
+  .bv-legend{display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--ink-2); flex-wrap:wrap}
+  .bv-legend span{display:inline-flex; align-items:center; gap:7px}
+  .bv-legend .sw{width:12px; height:12px; border-radius:3px}
+
+  /* how it works */
+  .steps{display:grid; grid-template-columns:repeat(3,1fr); gap:20px}
+  @media (max-width:860px){ .steps{grid-template-columns:1fr} }
+  .step{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:24px; box-shadow:var(--shadow-sm)}
+  .step .n{width:34px; height:34px; border-radius:9px; background:var(--brand-050); color:var(--brand-700); display:grid; place-items:center; font-weight:800; font-family:var(--mono)}
+  .step h3{font-size:17px; font-weight:700; margin:16px 0 8px}
+  .step p{font-size:14px; color:var(--ink-2)}
+  .step code{font-family:var(--mono); font-size:12.5px; background:var(--surface-2); border:1px solid var(--border); padding:1px 6px; border-radius:5px; color:var(--ink)}
+
+  /* CTA */
+  .cta{position:relative; overflow:hidden; background:linear-gradient(135deg,#0a1f52,#0061ff); color:#fff; border-radius:var(--r-xl); padding:52px; box-shadow:var(--shadow-lg)}
+  .cta::after{content:""; position:absolute; right:-80px; top:-80px; width:320px; height:320px; border-radius:50%; background:rgba(255,255,255,.08)}
+  .cta h2{font-size:clamp(26px,3vw,36px); font-weight:800; max-width:18ch; position:relative}
+  .cta p{margin-top:14px; font-size:17px; color:#d6e2ff; max-width:52ch; position:relative}
+  .cta .row{display:flex; gap:14px; margin-top:28px; flex-wrap:wrap; position:relative}
+  .cta .btn-white{background:#fff; color:var(--brand-700)}
+  .cta .btn-white:hover{background:#eef4ff}
+  .cta .btn-outline{background:transparent; color:#fff; border-color:rgba(255,255,255,.5)}
+  .cta .btn-outline:hover{background:rgba(255,255,255,.12)}
+  .cmd{font-family:var(--mono); font-size:13px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); border-radius:10px; padding:12px 16px; margin-top:22px; display:inline-flex; align-items:center; gap:10px; position:relative; color:#eaf1ff}
+  .cmd .pmt{color:#8fb4ff}
+
+  footer{padding:40px 0 56px; color:var(--ink-3); font-size:13.5px; border-top:1px solid var(--border); margin-top:24px}
+  footer .f-inner{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  footer .disc{margin-left:auto; max-width:46ch; text-align:right}
+  @media (max-width:680px){ footer .disc{text-align:left; margin-left:0} }
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Certified Metrics home">
+      <svg class="glyph" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#0061ff"/>
+        <path d="M9 16.5l4.2 4.2L23 11" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Certified&nbsp;Metrics</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#registry">Registry</a>
+      <a href="#control">The control</a>
+      <a href="#how">How it works</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn-link" href="#control">See it catch a bug</a>
+      <a class="btn btn-primary" href="#cta">Book a walkthrough</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l7 3v6c0 4.5-3 8.3-7 9.5C8 19.3 5 15.5 5 11V5l7-3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        A trust layer for the metrics your board reads
+      </span>
+      <h1>A query that returns a number<br>is not a <span class="accent">correct metric.</span></h1>
+      <p class="lede">Every dashboard at scale has metrics that are <b>green, shipped, and quietly wrong.</b> Certified Metrics promotes a number only when it is governed by one definition, fresh, and reconciled against an independent source of truth.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#control">Watch reconciliation catch a bug</a>
+        <a class="btn btn-ghost" href="#registry">Explore the live registry</a>
+      </div>
+      <div class="trust-row">
+        <span class="tr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> One governed definition</span>
+        <span class="tr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Freshness SLA</span>
+        <span class="tr"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg> Independent reconciliation</span>
+      </div>
+    </div>
+
+    <!-- live preview -->
+    <div class="preview" aria-label="Live certification output preview">
+      <div class="preview-top">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="file">metrics_cli certify · certification_registry</span>
+      </div>
+      <div class="preview-body">
+        <div class="pv-row"><span class="pv-k"><svg class="tick" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e7f7ef"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a8f5b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>net_mrr</span><span class="pv-v">$214.6M · −0.0001%</span></div>
+        <div class="pv-row"><span class="pv-k"><svg class="tick" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e7f7ef"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a8f5b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>paid_conversion</span><span class="pv-v">4.71% · +0.0000%</span></div>
+        <div class="pv-row"><span class="pv-k"><svg class="tick" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e7f7ef"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a8f5b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>storage_gb_active</span><span class="pv-v">982M GB · +0.0000%</span></div>
+        <div class="pv-row"><span class="pv-k"><svg class="tick" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e7f7ef"/><path d="M8 12l2.5 2.5L16 9" stroke="#0a8f5b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>dau · wau · mau</span><span class="pv-v">12.4M / 31.8M / 78.2M</span></div>
+      </div>
+      <div class="pv-foot">
+        <span>Reconciled against golden reference</span>
+        <span class="status-pill"><span class="pulse"></span>8/8 certified</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REGISTRY + CONTROL ============ -->
+<section class="band" id="registry" style="padding-top:34px">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Live certification registry</div>
+      <h2>Every metric, with proof attached</h2>
+      <p>The numbers a SaaS business runs on — engagement, conversion, revenue, storage — each carrying an owner, a freshness clock, a reconciliation variance, and a content checksum. This is the registry an exec team can actually trust.</p>
+    </div>
+
+    <!-- KPI row -->
+    <div class="kpis" id="kpis">
+      <div class="kpi" id="kpi-certified">
+        <div class="lbl">Certification rate</div>
+        <div class="val"><span id="k-certified">8</span><small>/8 metrics</small></div>
+        <div class="sub" id="k-certified-sub">All gates passing</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Reconciliation tolerance</div>
+        <div class="val">±0.50<small>%</small></div>
+        <div class="sub">vs. independent reference</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Freshness SLA</div>
+        <div class="val">&lt; 6<small>h</small></div>
+        <div class="sub">oldest source partition</div>
+      </div>
+      <div class="kpi" id="kpi-bug">
+        <div class="lbl">Definition bugs caught</div>
+        <div class="val" id="k-bugs">0</div>
+        <div class="sub" id="k-bugs-sub">schema tests stayed green</div>
+      </div>
+    </div>
+
+    <!-- the dashboard panel -->
+    <div class="panel" id="control">
+      <div class="panel-head">
+        <h3>Certification registry</h3>
+        <span class="desc">finance &amp; growth analytics · refreshed continuously</span>
+        <span class="ml-auto status-pill" id="panel-status"><span class="pulse"></span><span id="panel-status-txt">8 / 8 certified</span></span>
+      </div>
+
+      <div class="control-bar">
+        <label class="switch">
+          <input type="checkbox" id="bugToggle" aria-describedby="ctl-desc" />
+          <span class="track"></span><span class="knob"></span>
+          <span class="lab">Inject definition bug</span>
+        </label>
+        <span class="ctl-txt" id="ctl-desc">Ship a realistic mistake: <b>net_mrr forgets to subtract refunds</b>. It passes every schema and freshness test. Watch what happens to certification.</span>
+      </div>
+
+      <div class="tbl-scroll">
+        <table id="registry-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Owner</th>
+              <th class="r">Value</th>
+              <th>Freshness</th>
+              <th class="r">Variance</th>
+              <th>Status</th>
+              <th>Checksum</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- reconciliation proof: gates + explainer -->
+    <div class="proof">
+      <div class="gates" id="gates">
+        <div class="gate" data-gate="governance">
+          <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l8 4v5c0 4-3.4 7.4-8 9-4.6-1.6-8-5-8-9V7l8-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+          <div><div class="g-t">Governance gate</div><div class="g-d">One MetricFlow definition, registered owner</div></div>
+          <span class="res" id="g-governance">PASS</span>
+        </div>
+        <div class="gate" data-gate="freshness">
+          <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div><div class="g-t">Freshness gate</div><div class="g-d">Source partitions inside the SLA window</div></div>
+          <span class="res" id="g-freshness">PASS</span>
+        </div>
+        <div class="gate" data-gate="schema">
+          <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+          <div><div class="g-t">Schema &amp; unit tests</div><div class="g-d">Types, not-null, relationships, unit cases</div></div>
+          <span class="res" id="g-schema">PASS</span>
+        </div>
+        <div class="gate" data-gate="reconcile">
+          <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 8l-3 3 3 3M4 11h11M17 16l3-3-3-3M20 13H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div><div class="g-t">Reconciliation gate</div><div class="g-d">Re-derived golden value, independent path</div></div>
+          <span class="res" id="g-reconcile">PASS</span>
+        </div>
+      </div>
+
+      <div class="explain" id="explainer" aria-live="polite">
+        <div class="e-head">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18h6M10 21h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0012 2z" stroke="#9fb4d8" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          metrics_cli explain
+        </div>
+        <pre id="explain-body"><span class="dim">$ certify</span>
+<span class="ok-line">✓ all 8 metrics reconciled within tolerance</span>
+<span class="dim">  governance ok · freshness ok · schema ok</span>
+
+<span class="dim"># Flip the switch above to ship the bug.</span></pre>
+      </div>
+    </div>
+
+    <!-- tolerance band -->
+    <div class="band-viz">
+      <h4>Reconciliation: measured value vs. golden reference</h4>
+      <div class="bv-sub">Each metric is plotted by how far it drifts from an independently re-derived value. Inside the green band is certifiable. Outside it fails — no matter how green the schema tests are.</div>
+      <div class="track-wrap" id="track">
+        <div class="tol" id="tol"></div>
+        <div class="axis"></div>
+        <div class="zero"></div>
+        <div class="zlabel">0%</div>
+      </div>
+      <div class="bv-legend">
+        <span><span class="sw" style="background:rgba(10,143,91,.18); border:1px dashed #0a8f5b"></span>±0.50% tolerance band</span>
+        <span><span class="sw" style="background:#0061ff"></span>Certified</span>
+        <span><span class="sw" style="background:#d11f3a"></span>Failed reconciliation</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="band" id="how" style="background:linear-gradient(180deg,#fff,#f5f7fb)">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">The certification contract</div>
+      <h2>Three gates between a query and a trusted number</h2>
+      <p>Schema tests prove a column is the right shape. They cannot prove the logic is right. Certification adds the gate that does.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Govern</h3>
+        <p>One definition in <code>MetricFlow</code>, one named owner, registered in source control. No more three teams with three versions of "active user."</p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Check freshness</h3>
+        <p>Every source partition must land inside its SLA window before the metric is eligible. Stale inputs never quietly become a stale number on a slide.</p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Reconcile</h3>
+        <p>The pipeline value is compared to a golden value re-derived down an <code>independent path</code>. Disagreement beyond tolerance fails the build and names the metric, the variance, and the likely cause.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="band" id="cta" style="padding-top:8px">
+  <div class="wrap">
+    <div class="cta">
+      <h2>Stop defending numbers you can't prove.</h2>
+      <p>Wire Certified Metrics into your existing dbt + warehouse stack and give every executive number an owner, a freshness clock, and a reconciliation receipt. The whole demo runs offline — no warehouse, no credentials, no network.</p>
+      <div class="cmd"><span class="pmt">$</span> python -m metrics_cli.cli certify</div>
+      <div class="row">
+        <a class="btn btn-white" href="#registry">Replay the live demo</a>
+        <a class="btn btn-outline" href="#control">Inject another bug</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap f-inner">
+    <a class="brand" href="#top"><svg class="glyph" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0061ff"/><path d="M9 16.5l4.2 4.2L23 11" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Certified Metrics</span></a>
+    <span class="disc">Sample demo. Metric names and values illustrate a SaaS analytics use case; the certification logic, gates, and reconciliation control are real and shipped in this repository.</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // Canonical metric data. "ref" is the independently re-derived golden value.
+  // Healthy state mirrors evidence/certification_registry.md.
+  var METRICS = [
+    {name:"dau",                  owner:"growth-analytics",  value:"12.4M",     fresh:"2h ago",  v:"+0.0000%", sum:"d77857273f21"},
+    {name:"wau",                  owner:"growth-analytics",  value:"31.8M",     fresh:"2h ago",  v:"+0.0000%", sum:"88f7eac57a71"},
+    {name:"mau",                  owner:"growth-analytics",  value:"78.2M",     fresh:"4h ago",  v:"+0.0000%", sum:"157ebe2f8981"},
+    {name:"paid_conversion",      owner:"growth-analytics",  value:"4.71%",     fresh:"3h ago",  v:"+0.0000%", sum:"7beb5be2e64e"},
+    {name:"paying_users_monthly", owner:"growth-analytics",  value:"3.67M",     fresh:"3h ago",  v:"+0.0000%", sum:"bf23a4a20c91"},
+    {name:"storage_gb_active",    owner:"growth-analytics",  value:"982M GB",   fresh:"1h ago",  v:"+0.0000%", sum:"98576ec849de"},
+    {name:"net_mrr",             owner:"finance-analytics", value:"$214.6M",   fresh:"2h ago",  v:"-0.0001%", sum:"e9757ce18ee6", buggy:{value:"$218.5M", v:"+1.83%"}},
+    {name:"net_revenue_mom",     owner:"finance-analytics", value:"100.8%",    fresh:"2h ago",  v:"-0.0000%", sum:"9270adaee65a", buggy:{value:"102.6%", v:"+1.79%"}}
+  ];
+
+  // numeric variance for the tolerance-band plot (percent)
+  var BAND = {
+    "dau":0.000,"wau":0.000,"mau":0.000,"paid_conversion":0.000,"paying_users_monthly":0.000,
+    "storage_gb_active":0.000,"net_mrr":-0.0001,"net_revenue_mom":0.0
+  };
+  var BAND_BUG = { "net_mrr":1.83, "net_revenue_mom":1.79 };
+  var TOL = 0.5;          // ± tolerance %
+  var SCALE_MAX = 2.4;    // axis half-range %, so 1.83 sits comfortably inside
+
+  var SVG_OK  = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var SVG_BAD = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+
+  var rowsEl = document.getElementById("rows");
+  var toggle = document.getElementById("bugToggle");
+  var track  = document.getElementById("track");
+  var bugsCaught = 0;
+
+  function buggy(){ return toggle.checked; }
+
+  function render(){
+    var bug = buggy();
+    rowsEl.innerHTML = "";
+    METRICS.forEach(function(m){
+      var failing = bug && m.buggy;
+      var value = failing ? m.buggy.value : m.value;
+      var variance = failing ? m.buggy.v : m.v;
+      var tr = document.createElement("tr");
+      if(failing) tr.className = "row-fail";
+      tr.innerHTML =
+        '<td><span class="metric-name">'+m.name+'</span></td>'+
+        '<td><span class="owner">'+m.owner+'</span></td>'+
+        '<td class="r"><span class="val-cell'+(failing?' shift':'')+'">'+value+'</span></td>'+
+        '<td><span class="fresh"><span class="d"></span>'+m.fresh+'</span></td>'+
+        '<td class="r"><span class="variance'+(failing?' fail':'')+'">'+variance+'</span></td>'+
+        '<td>'+(failing
+            ? '<span class="badge bad">'+SVG_BAD+'FAILED</span>'
+            : '<span class="badge ok">'+SVG_OK+'CERTIFIED</span>')+'</td>'+
+        '<td><span class="checksum">'+m.sum+'…</span></td>';
+      rowsEl.appendChild(tr);
+    });
+
+    var failCount = bug ? METRICS.filter(function(m){return m.buggy;}).length : 0;
+    var certified = METRICS.length - failCount;
+
+    // KPIs + panel status
+    document.getElementById("k-certified").textContent = certified;
+    document.getElementById("k-certified-sub").textContent = failCount ? failCount+" failed reconciliation" : "All gates passing";
+    document.getElementById("kpi-certified").classList.toggle("alert", !!failCount);
+
+    var ps = document.getElementById("panel-status");
+    document.getElementById("panel-status-txt").textContent = certified+" / "+METRICS.length+" certified";
+    ps.classList.toggle("bad", !!failCount);
+
+    // gates: only reconciliation flips; the rest stay green (that's the whole point)
+    setGate("reconcile", !bug);
+    setGate("governance", true);
+    setGate("freshness", true);
+    setGate("schema", true);
+
+    // bugs-caught counter
+    var kb = document.getElementById("kpi-bug");
+    document.getElementById("k-bugs").textContent = bugsCaught;
+    document.getElementById("k-bugs-sub").textContent = bug ? "schema + freshness stayed GREEN" : "schema tests stayed green";
+    kb.classList.toggle("alert", bug);
+
+    renderExplain(bug);
+    renderBand(bug);
+  }
+
+  function setGate(id, pass){
+    var el = document.getElementById("g-"+id);
+    var card = el.closest(".gate");
+    el.textContent = pass ? "PASS" : "FAIL";
+    card.classList.toggle("fail", !pass);
+  }
+
+  function renderExplain(bug){
+    var pre = document.getElementById("explain-body");
+    if(!bug){
+      pre.innerHTML =
+        '<span class="dim">$ certify</span>\n'+
+        '<span class="ok-line">✓ all 8 metrics reconciled within tolerance</span>\n'+
+        '<span class="dim">  governance ok · freshness ok · schema ok</span>\n\n'+
+        '<span class="dim"># Flip the switch above to ship the bug.</span>';
+    } else {
+      pre.innerHTML =
+        '<span class="dim">$ certify --inject-break</span>\n'+
+        '<span class="ok-line">✓ schema tests        PASS  (42/42)</span>\n'+
+        '<span class="ok-line">✓ freshness gate      PASS</span>\n'+
+        '<span class="bad-line">✗ reconciliation      FAIL  (2 metrics)</span>\n\n'+
+        '<span class="dim">$ explain net_mrr</span>\n'+
+        '  metric:   <span class="key">net_mrr</span>\n'+
+        '  variance: <span class="bad-line">+1.83%</span>  (tolerance ±0.50%)\n'+
+        '  cause:    <span class="key">refunds_not_subtracted</span>\n'+
+        '  evidence: overage equals refund total\n'+
+        '  blast:    <span class="bad-line">net_revenue_mom</span> (derived)';
+    }
+  }
+
+  function pct(v){ // map variance % -> left% on the track
+    var clamped = Math.max(-SCALE_MAX, Math.min(SCALE_MAX, v));
+    return (50 + (clamped/SCALE_MAX)*50);
+  }
+
+  function renderBand(bug){
+    // clear old markers
+    Array.prototype.slice.call(track.querySelectorAll(".marker")).forEach(function(n){n.remove();});
+    // tolerance band geometry
+    var tol = document.getElementById("tol");
+    var left = pct(-TOL), right = pct(TOL);
+    tol.style.left = left+"%";
+    tol.style.width = (right-left)+"%";
+
+    METRICS.forEach(function(m){
+      var v = (bug && BAND_BUG[m.name]!==undefined) ? BAND_BUG[m.name] : BAND[m.name];
+      var failing = Math.abs(v) > TOL;
+      var mk = document.createElement("div");
+      mk.className = "marker" + (failing ? " fail" : "");
+      mk.style.left = pct(v)+"%";
+      mk.setAttribute("tabindex","0");
+      mk.setAttribute("role","img");
+      mk.setAttribute("aria-label", m.name+" variance "+v.toFixed(2)+" percent, "+(failing?"failed":"within tolerance"));
+      mk.innerHTML = '<span class="mtip">'+m.name+' · '+(v>=0?"+":"")+v.toFixed(2)+'%</span>';
+      track.appendChild(mk);
+    });
+  }
+
+  toggle.addEventListener("change", function(){
+    if(toggle.checked) bugsCaught += 1;
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
