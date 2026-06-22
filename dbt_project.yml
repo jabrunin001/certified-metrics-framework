@@ -5,7 +5,7 @@ profile: cmf
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
-test-paths: ["tests", "unit_tests"]
+test-paths: ["tests"]
 macro-paths: ["macros"]
 
 vars:
