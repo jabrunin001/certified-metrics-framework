@@ -1287,9 +1287,17 @@ Expected: FAIL — module not found.
 from __future__ import annotations
 import json
 import subprocess
+import sys
+from pathlib import Path
 import duckdb
 
 MF_GRAIN = {"dau": "day", "wau": "week"}  # everything else is monthly
+
+# Resolve dbt/mf to the venv hosting this package so subprocess doesn't pick
+# up a system dbt that lacks the duckdb adapter.
+_VENV_BIN = Path(sys.executable).parent
+_DBT = str(_VENV_BIN / "dbt")
+_MF = str(_VENV_BIN / "mf")
 
 
 def parse_mf_table(text: str) -> float | None:
@@ -1319,7 +1327,7 @@ def dbt_parse_with_vars(inject_break: bool, runner=subprocess.run) -> bool:
     metricflow 0.206.0 has no --dbt-vars on `mf query`; the var must be set
     at parse time so the compiled measure expr in target/ reflects it.
     """
-    cmd = ["dbt", "parse", "--profiles-dir", ".",
+    cmd = [_DBT, "parse", "--profiles-dir", ".",
            "--vars", json.dumps({"inject_break": bool(inject_break)})]
     result = runner(cmd, capture_output=True, text=True)
     return getattr(result, "returncode", 1) == 0
@@ -1333,8 +1341,10 @@ def semantic_metric_total(metric: str, runner=subprocess.run) -> float | None:
     """
     grain = MF_GRAIN.get(metric, "month")
     group_by = f"metric_time__{grain}"
-    cmd = ["mf", "query", "--metrics", metric,
-           "--group-by", group_by, "--order", group_by]
+    # --decimals 10: mf rounds to 2 dp by default; summed ratio metrics
+    # (paid_conversion, gross_retention) then drift past the reconcile tolerance.
+    cmd = [_MF, "query", "--metrics", metric,
+           "--group-by", group_by, "--order", group_by, "--decimals", "10"]
     result = runner(cmd, capture_output=True, text=True)
     if getattr(result, "returncode", 1) != 0:
         return None
@@ -1513,7 +1523,10 @@ def render_registry_md(certs: list[MetricCertificate]) -> str:
 - [ ] **Step 4: Write `metrics_cli/cli.py`**
 
 ```python
-from __future__ import annotations
+# NOTE: do NOT add `from __future__ import annotations` here — under it Typer
+# 0.12.5 sees the `bool` annotation as the string "bool", fails to build the
+# flag, and delivers None for --inject-break (bool(None) is False, so the break
+# never fires). Plain runtime annotations keep Typer's introspection working.
 import glob
 import hashlib
 import json
@@ -1544,7 +1557,8 @@ def _semantic_metric_names() -> set[str]:
 
 
 @app.command()
-def certify(inject_break: bool = typer.Option(False, "--inject-break"),
+def certify(inject_break: bool = typer.Option(False, "--inject-break",
+                                              is_flag=True, flag_value=True),
             out: str = typer.Option("evidence", "--out")):
     """Run all gates per metric and emit certificates + registry. Exits 1 if any fail."""
     registry = read_registry(DB_PATH)
