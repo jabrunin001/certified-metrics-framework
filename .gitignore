@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.duckdb
+target/
+logs/
+dbt_packages/
+.pytest_cache/
+evidence/
