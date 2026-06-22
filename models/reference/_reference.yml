@@ -1,0 +1,8 @@
+version: 2
+models:
+  - name: ref_metric_values
+    columns:
+      - name: metric
+        data_tests: [not_null]
+      - name: reference_value
+        data_tests: [not_null]
