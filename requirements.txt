@@ -3,5 +3,6 @@ dbt-duckdb==1.8.4
 dbt-metricflow[duckdb]==0.7.1
 duckdb==1.0.0
 typer==0.12.5
+click==8.1.7  # typer 0.12.5 was built for click 8.1.x; 8.4.x breaks --help
 pydantic>=1.10.0,<1.11.0
 pytest==8.3.3
