@@ -54,9 +54,9 @@ paid_conversion as (
     group by m.month_start
 ),
 
-gross_retention as (
-    -- net revenue this month / net revenue prior month (>= second month only)
-    select 'gross_retention' as metric, cur.month_start as grain_date,
+net_revenue_mom as (
+    -- month-over-month net revenue ratio (>= second month only)
+    select 'net_revenue_mom' as metric, cur.month_start as grain_date,
            (cur.rev / nullif(prev.rev, 0)) as reference_value
     from (
         select month_start, sum(net_amount) as rev
@@ -82,5 +82,5 @@ union all select * from mau
 union all select * from net_mrr
 union all select * from paying_users_monthly
 union all select * from paid_conversion
-union all select * from gross_retention
+union all select * from net_revenue_mom
 union all select * from storage_gb_active

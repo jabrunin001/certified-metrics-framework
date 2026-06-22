@@ -27,9 +27,9 @@ metrics:
     description: Net monthly recurring revenue (MRR minus refunds).
     type: simple
     type_params: {measure: net_revenue}
-  - name: gross_retention
-    label: Gross Retention
-    description: Net revenue this month over net revenue prior month.
+  - name: net_revenue_mom
+    label: Month-over-Month Net Revenue Ratio
+    description: Month-over-month net revenue ratio (this month's net MRR / prior month's).
     type: derived
     type_params:
       expr: "current_net / prior_net"

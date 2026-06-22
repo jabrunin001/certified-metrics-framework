@@ -4,6 +4,6 @@ wau,growth-analytics,week,count,_semantic_usage.yml
 mau,growth-analytics,month,count,_semantic_usage.yml
 paid_conversion,growth-analytics,month,ratio,_semantic_usage.yml
 net_mrr,finance-analytics,month,revenue,_semantic_revenue.yml
-gross_retention,finance-analytics,month,ratio,_semantic_revenue.yml
+net_revenue_mom,finance-analytics,month,ratio,_semantic_revenue.yml
 storage_gb_active,growth-analytics,day,revenue,_semantic_usage.yml
 paying_users_monthly,growth-analytics,month,count,_semantic_usage.yml

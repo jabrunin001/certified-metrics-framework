@@ -9,7 +9,7 @@ def test_parse_mf_table_sums_value_column():
     assert parse_mf_table(text) == 300.5
 
 def test_parse_mf_table_skips_none_and_header():
-    text = ("metric_time__month  gross_retention\n"
+    text = ("metric_time__month  net_revenue_mom\n"
             "2026-01-01T00:00:00  None\n"
             "2026-02-01T00:00:00  1.98\n")
     assert parse_mf_table(text) == 1.98
