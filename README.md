@@ -36,7 +36,7 @@ dbt build --profiles-dir .                                                      
 ```
 
 The schema/freshness tests stay green. Only the reconciliation gate goes red,
-naming `net_mrr` (and the derived `gross_retention`) with the exact variance.
+naming `net_mrr` (and the derived `net_revenue_mom`) with the exact variance.
 The explainer reports `refunds_not_subtracted` because the overage equals the
 refund total. CI's `cert-proof` job asserts exactly this.
 
