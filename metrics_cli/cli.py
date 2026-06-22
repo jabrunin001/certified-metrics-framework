@@ -1,4 +1,3 @@
-from __future__ import annotations
 import glob
 import hashlib
 import json
@@ -29,7 +28,7 @@ def _semantic_metric_names() -> set[str]:
 
 
 @app.command()
-def certify(inject_break: bool = typer.Option(False, "--inject-break"),
+def certify(inject_break: bool = typer.Option(False, "--inject-break", is_flag=True, flag_value=True),
             out: str = typer.Option("evidence", "--out")):
     """Run all gates per metric and emit certificates + registry. Exits 1 if any fail."""
     registry = read_registry(DB_PATH)
@@ -37,12 +36,6 @@ def certify(inject_break: bool = typer.Option(False, "--inject-break"),
     freshness = read_freshness(DB_PATH)
     semantic_names = _semantic_metric_names()
     os.makedirs(out, exist_ok=True)
-
-    # Normalize inject_break: typer 0.12.x can deliver the string 'False'
-    # instead of the bool False when no flag is supplied; bool('False') == True
-    # which would silently activate the break path on every clean run.
-    if isinstance(inject_break, str):
-        inject_break = inject_break.lower() not in ("false", "0", "")
 
     # Compile the manifest once in the requested state; mf reads it from target/.
     if not dbt_parse_with_vars(inject_break):
