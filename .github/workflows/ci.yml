@@ -1,0 +1,49 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt
+      - run: dbt deps --profiles-dir .
+      - run: python scripts/seed_events.py
+      - run: dbt build --profiles-dir .
+      - run: python -m pytest tests_py -v
+
+  cert-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt
+      - run: dbt deps --profiles-dir .
+      - run: python scripts/seed_events.py
+      - name: clean build certifies
+        run: |
+          dbt build --profiles-dir .
+          python -m metrics_cli.cli certify
+      - name: injected break fails certification (and names net_mrr)
+        run: |
+          if python -m metrics_cli.cli certify --inject-break > out.txt 2>&1; then
+            echo "ERROR: certification should have failed under inject-break"; cat out.txt; exit 1
+          fi
+          grep -q "FAIL  net_mrr" out.txt
+          python -m metrics_cli.cli explain net_mrr | grep -q "refunds_not_subtracted"
+      - name: restored build re-certifies
+        run: |
+          dbt build --profiles-dir .
+          python -m metrics_cli.cli certify
+
+  cli-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests_py/test_gates.py tests_py/test_certificate.py tests_py/test_explain.py tests_py/test_mf_runner.py -v
