@@ -38,7 +38,7 @@ models/
   reference/      ref_metric_values.sql + _reference.yml
   semantic/       _semantic_usage.yml, _semantic_revenue.yml   # MetricFlow semantic_models + metrics
   certification/  cert_freshness.sql + _certification.yml
-unit_tests/       int_unit_tests.yml
+models/intermediate/int_unit_tests.yml   # dbt 1.8 discovers unit tests under model-paths only
 tests/            assert_freshness_ok.sql
 metrics_cli/
   __init__.py, cli.py, gates.py, models.py, mf_runner.py, certificate.py
@@ -84,7 +84,7 @@ profile: cmf
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
-test-paths: ["tests", "unit_tests"]
+test-paths: ["tests"]
 macro-paths: ["macros"]
 
 vars:
@@ -441,7 +441,7 @@ git commit -m "feat: staging models over synthetic seeds"
 ## Task 4: Intermediate models + dbt unit tests
 
 **Files:**
-- Create: `models/intermediate/int_user_daily_activity.sql`, `models/intermediate/int_subscription_months.sql`, `models/intermediate/_intermediate.yml`, `unit_tests/int_unit_tests.yml`
+- Create: `models/intermediate/int_user_daily_activity.sql`, `models/intermediate/int_subscription_months.sql`, `models/intermediate/_intermediate.yml`, `models/intermediate/int_unit_tests.yml`
 
 **Interfaces:**
 - Consumes: `stg_usage_events`, `stg_subscriptions`, `stg_refunds`.
@@ -485,7 +485,7 @@ left join refunds r
 
 - [ ] **Step 2: Write the unit tests (dbt unit tests assert logic on fixed inputs)**
 
-`unit_tests/int_unit_tests.yml`:
+`models/intermediate/int_unit_tests.yml`:
 ```yaml
 version: 2
 
@@ -543,7 +543,7 @@ Expected: both unit tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add models/intermediate unit_tests/int_unit_tests.yml
+git add models/intermediate models/intermediate/int_unit_tests.yml
 git commit -m "feat: intermediate activity + subscription-month models with dbt unit tests"
 ```
 
@@ -2193,7 +2193,7 @@ refund total. CI's `cert-proof` job asserts exactly this.
 | Observability / alerting | freshness gate + `certification_registry.md` + CI `cert-proof` |
 | Airflow, failure recovery | `airflow/dags/certify_metrics_dag.py`, `docs/orchestration.md` |
 | AI-native tooling | `metrics_cli/explain/` (deterministic + optional local Ollama) |
-| dbt unit tests | `unit_tests/int_unit_tests.yml` |
+| dbt unit tests | `models/intermediate/int_unit_tests.yml` |
 | Spark SQL | `databricks/` Metric View + Delta SQL |
 | CI | `.github/workflows/ci.yml` |
 
