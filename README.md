@@ -3,7 +3,7 @@
 A small, runnable SaaS-analytics metrics platform in dbt, MetricFlow, and DuckDB.
 A metric is **certified** only when it is *governed* (one MetricFlow definition),
 *fresh*, and *reconciled* against an independently re-derived golden value. The
-point: **a query that returns a number is not a correct metric** — a definition
+point: **a query that returns a number is not a correct metric**. A definition
 bug passes every schema test and is caught only by reconciliation.
 
 ## 60-second quickstart
