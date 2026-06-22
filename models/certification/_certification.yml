@@ -1,0 +1,6 @@
+version: 2
+models:
+  - name: cert_freshness
+    columns:
+      - name: source_name
+        data_tests: [unique, not_null]
