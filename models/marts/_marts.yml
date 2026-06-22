@@ -1,0 +1,31 @@
+version: 2
+models:
+  - name: dim_date
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+  - name: dim_user
+    columns:
+      - name: user_id
+        data_tests: [unique, not_null]
+  - name: dim_plan
+    columns:
+      - name: plan_id
+        data_tests: [unique, not_null]
+  - name: fct_usage_daily
+    columns:
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_user'), field: user_id}
+      - name: date_day
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_date'), field: date_day}
+  - name: fct_subscription_revenue
+    columns:
+      - name: plan_id
+        data_tests:
+          - relationships: {to: ref('dim_plan'), field: plan_id}
+      - name: net_amount
+        data_tests: [not_null]
