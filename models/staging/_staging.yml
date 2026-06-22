@@ -1,0 +1,30 @@
+version: 2
+
+seeds:
+  - name: users
+  - name: usage_events
+  - name: subscriptions
+  - name: refunds
+  - name: metric_registry
+
+models:
+  - name: stg_users
+    columns:
+      - name: user_id
+        data_tests: [unique, not_null]
+  - name: stg_usage_events
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: user_id
+        data_tests:
+          - not_null
+          - relationships: {to: ref('stg_users'), field: user_id}
+  - name: stg_subscriptions
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+  - name: stg_refunds
+    columns:
+      - name: refund_id
+        data_tests: [unique, not_null]
