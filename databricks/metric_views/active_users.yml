@@ -1,0 +1,10 @@
+version: 0.1
+source: cmf.analytics.fct_usage_daily
+dimensions:
+  - name: activity_day
+    expr: date_day
+measures:
+  - name: active_users
+    expr: COUNT(DISTINCT user_id)
+  - name: storage_gb_active
+    expr: SUM(storage_bytes_day) / 1e9
