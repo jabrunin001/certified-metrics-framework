@@ -19,6 +19,7 @@
 - Bug injection is controlled solely by dbt var `inject_break` (default `false`); no other code path changes metric values.
 - Reconciliation tolerance: exact equality for integer count metrics; relative tolerance `1e-4` (0.01%) for revenue/ratio metrics.
 - Metric set (canonical, used everywhere): `dau`, `wau`, `mau`, `paid_conversion`, `net_mrr`, `gross_retention`, `storage_gb_active`.
+- **Pydantic is v1 (1.10.x), not v2** — MetricFlow 0.206.0 (pulled by `dbt-metricflow[duckdb]==0.7.1`) hard-pins `pydantic<1.11`, and the whole project shares one venv. Use pydantic v1 APIs everywhere: `model.dict()` (not `model_dump()`), `model.json(indent=2)` (not `model_dump_json(...)`). `BaseModel`, `Literal` fields, `X | None` annotations, defaults, and `@property` all work unchanged under v1 on Python 3.11.
 
 ---
 
@@ -64,12 +65,14 @@ docs/             orchestration.md, README.md (root)
 ```
 dbt-core==1.8.7
 dbt-duckdb==1.8.4
-dbt-metricflow[duckdb]==0.6.0
+dbt-metricflow[duckdb]==0.7.1
 duckdb==1.0.0
 typer==0.12.5
-pydantic==2.9.2
+pydantic>=1.10.0,<1.11.0
 pytest==8.3.3
 ```
+
+> Note: `dbt-metricflow==0.7.1` (not 0.6.0, which requires `dbt-core<1.8.0`) and `pydantic<1.11` (MetricFlow 0.206.0 hard-pins pydantic v1). See Global Constraints — all CLI code uses pydantic v1 APIs.
 
 - [ ] **Step 2: Write `dbt_project.yml`**
 
@@ -1440,7 +1443,7 @@ def build_certificate(reg_row: dict, semantic_value: float | None,
         definition_source=reg_row["definition_file"], gates=gates,
         semantic_value=semantic_value, reference_value=reference_value,
         variance_pct=vp, as_of=as_of)
-    payload = cert.model_dump()
+    payload = cert.dict()
     payload.pop("checksum", None)
     cert.checksum = hashlib.sha256(
         json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
@@ -1509,7 +1512,7 @@ def certify(inject_break: bool = typer.Option(False, "--inject-break"),
                                  semantic_names, registry, AS_OF)
         certs.append(cert)
         Path(out, f"metric_certificate_{metric}.json").write_text(
-            cert.model_dump_json(indent=2))
+            cert.json(indent=2))
         typer.echo(f"{'PASS' if cert.certified else 'FAIL'}  {metric}")
 
     Path(out, "certification_registry.md").write_text(render_registry_md(certs))
